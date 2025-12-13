@@ -8,7 +8,7 @@ const users: Map<string, string> = new Map()
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: "*",
     methods: ["GET", "POST"],
   }
 })
@@ -37,6 +37,8 @@ io.on("connection", (socket) => {
   })
 })
 
-server.listen(3001, () => {
-  console.log("Server is running on port 3001.")
+const PORT = parseInt(Deno.env.get("PORT") || "3001")
+
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}.`)
 })
