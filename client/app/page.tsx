@@ -54,7 +54,8 @@ const Home = () => {
   }, [messageList, isTypingUser])
 
   useEffect(() => {
-    const socket = io("https://whatsapp-clone-server-57w6.onrender.com")
+    const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:3001"
+    const socket = io(serverUrl)
     socketRef.current = socket;
 
     socket.on("connect", () => {
