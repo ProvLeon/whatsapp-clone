@@ -274,7 +274,7 @@ const Home = () => {
             variant="ghost"
             size="icon"
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            className={`flex-shrink-0 ${showEmojiPicker ? 'bg-primary/10 text-primary' : ''}`}
+            className={`flex-shrink-0 ${showEmojiPicker ? 'bg-primary/10 text-primary' : 'hover:bg-primary/20'}`}
           >
             <Smile className="w-5 h-5" />
           </Button>
