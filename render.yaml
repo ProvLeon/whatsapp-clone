@@ -1,0 +1,26 @@
+# Render Blueprint - Deploy both Deno services
+services:
+  # Backend Server (Deno)
+  - type: web
+    name: whatsapp-clone-server
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    envVars:
+      - key: PORT
+        value: 3001
+    autoDeploy: true
+
+  # Frontend Client (Deno + Next.js)
+  - type: web
+    name: whatsapp-clone-client
+    runtime: docker
+    dockerfilePath: ./client/Dockerfile
+    dockerContext: ./client
+    buildCommand: ""
+    envVars:
+      - key: NEXT_PUBLIC_SERVER_URL
+        value: https://whatsapp-clone-server-57w6.onrender.com
+      - key: PORT
+        value: 3000
+    autoDeploy: true
