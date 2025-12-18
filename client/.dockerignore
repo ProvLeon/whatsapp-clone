@@ -1,19 +1,21 @@
-# Dependencies
+# Dependencies (will be cached by Deno)
 node_modules
-npm-debug.log
 
-# Next.js build outputs
+# Build output (will be rebuilt in Docker)
 .next
 out
 
-# Environment files (we'll set these in Render)
+# Environment files (set in Render)
 .env
 .env.local
 .env.production.local
 
-# Misc
+# Git
 .git
 .gitignore
+
+# Misc
 README.md
 *.md
 .DS_Store
+.vscode

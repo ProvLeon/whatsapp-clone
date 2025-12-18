@@ -1,53 +1,35 @@
-# Stage 1: Dependencies
-FROM node:20-alpine AS deps
+FROM denoland/deno:latest
+
+# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json* ./
+# Copy dependency/config files first (for better caching)
+COPY deno.json deno.lock* ./
+COPY package.json ./
 
-# Install dependencies
-RUN npm ci
-
-# Stage 2: Build
-FROM node:20-alpine AS builder
-WORKDIR /app
-
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
+# Copy all source files
 COPY . .
 
-# Set environment variable for the build
+# Cache dependencies
+RUN deno cache --node-modules-dir npm:next@16.0.10
+RUN deno cache --node-modules-dir npm:react@19.2.1
+RUN deno cache --node-modules-dir npm:react-dom@19.2.1
+RUN deno cache --node-modules-dir npm:socket.io-client@^4.8.1
+
+# Set build-time environment variable
 ARG NEXT_PUBLIC_SERVER_URL
 ENV NEXT_PUBLIC_SERVER_URL=$NEXT_PUBLIC_SERVER_URL
 
-# Build the application
-RUN npm run build
-
-# Stage 3: Production
-FROM node:20-alpine AS runner
-WORKDIR /app
-
-ENV NODE_ENV=production
-
-# Create non-root user for security
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Copy necessary files from builder
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-
-# Set correct permissions
-RUN chown -R nextjs:nodejs /app
-
-# Switch to non-root user
-USER nextjs
+# Build the Next.js application
+RUN deno task build
 
 # Expose port
 EXPOSE 3000
 
+# Set runtime environment
 ENV PORT=3000
+ENV NODE_ENV=production
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+# Start the production server
+CMD ["deno", "task", "start"]
