@@ -4,7 +4,7 @@ FROM denoland/deno:latest
 WORKDIR /app
 
 # Copy dependency/config files first (for better caching)
-COPY deno.json deno.lock* ./
+COPY deno.lock* ./
 COPY package.json ./
 
 # Copy all source files
