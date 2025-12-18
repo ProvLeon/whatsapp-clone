@@ -1,26 +1,29 @@
-FROM denoland/deno:latest
+# Use a base image with both Node.js and install Deno
+FROM node:20-alpine
+
+# Install Deno
+RUN apk add --no-cache curl unzip
+RUN curl -fsSL https://deno.land/install.sh | sh
+ENV DENO_INSTALL="/root/.deno"
+ENV PATH="$DENO_INSTALL/bin:$PATH"
 
 # Set working directory
 WORKDIR /app
 
-# Copy dependency/config files first (for better caching)
-COPY deno.lock* ./
-COPY package.json ./
+# Copy package files first (for caching)
+COPY package.json package-lock.json* ./
+
+# Install Node dependencies (needed for Next.js build)
+RUN deno install
 
 # Copy all source files
 COPY . .
-
-# Cache dependencies
-RUN deno cache --node-modules-dir npm:next@16.0.10
-RUN deno cache --node-modules-dir npm:react@19.2.1
-RUN deno cache --node-modules-dir npm:react-dom@19.2.1
-RUN deno cache --node-modules-dir npm:socket.io-client@^4.8.1
 
 # Set build-time environment variable
 ARG NEXT_PUBLIC_SERVER_URL
 ENV NEXT_PUBLIC_SERVER_URL=$NEXT_PUBLIC_SERVER_URL
 
-# Build the Next.js application
+# Build the Next.js application using npm (more reliable for Next.js)
 RUN deno task build
 
 # Expose port
