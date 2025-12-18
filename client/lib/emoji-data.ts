@@ -76,7 +76,7 @@ export const emojiCategories: EmojiCategory[] = [
       "Beaming Face With Smiling Eyes", "Grinning Squinting Face", "Grinning Face With Sweat",
       "Rolling On The Floor Laughing", "Face With Tears Of Joy", "Slightly Smiling Face",
       "Upside Down Face", "Melting Face", "Winking Face", "Smiling Face With Smiling Eyes",
-      "Smiling Face With Halo", "Smiling Face With Hearts", "Smiling Face With Heart Eyes",
+      "Smiling Face With Halo", "Smiling Face With Hearts",
       "Star Struck", "Face Blowing A Kiss", "Kissing Face", "Smiling Face",
       "Kissing Face With Closed Eyes", "Face Savoring Food", "Face With Tongue",
       "Winking Face With Tongue", "Squinting Face With Tongue", "Money Mouth Face",
