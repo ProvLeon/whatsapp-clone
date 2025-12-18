@@ -1,0 +1,37 @@
+FROM denoland/deno:latest
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependency/config files first (for better caching)
+COPY deno.lock* ./
+COPY package.json ./
+
+RUN deno install
+# Copy all source files
+COPY . .
+
+# Cache dependencies
+RUN deno cache --node-modules-dir npm:next@16.0.10
+RUN deno cache --node-modules-dir npm:react@19.2.1
+RUN deno cache --node-modules-dir npm:react-dom@19.2.1
+RUN deno cache --node-modules-dir npm:socket.io-client@^4.8.1
+
+# Set build-time environment variable
+ARG NEXT_PUBLIC_SERVER_URL
+ENV NEXT_PUBLIC_SERVER_URL=$NEXT_PUBLIC_SERVER_URL
+
+# Build the Next.js application
+RUN deno task build
+
+# Expose port
+EXPOSE 3000
+
+# Set runtime environment
+ENV PORT=3000
+
+ENV NODE_ENV=production
+ENV HOSTNAME="0.0.0.0"
+
+# Start the production server
+CMD ["deno", "task", "start"]
