@@ -21,6 +21,10 @@ services:
     envVars:
       - key: NEXT_PUBLIC_SERVER_URL
         value: https://whatsapp-clone-server-57w6.onrender.com
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false # Set this in Render dashboard
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false # Set this in Render dashboard
       - key: PORT
         value: 3000
     autoDeploy: true

@@ -1,11 +1,5 @@
-# Use a base image with both Node.js and install Deno
+# Use Node.js Alpine image
 FROM node:20-alpine
-
-# Install Deno
-RUN apk add --no-cache curl unzip
-RUN curl -fsSL https://deno.land/install.sh | sh
-ENV DENO_INSTALL="/root/.deno"
-ENV PATH="$DENO_INSTALL/bin:$PATH"
 
 # Set working directory
 WORKDIR /app
@@ -13,17 +7,30 @@ WORKDIR /app
 # Copy package files first (for caching)
 COPY package.json package-lock.json* ./
 
-# Install Node dependencies (needed for Next.js build)
+# Install Node dependencies
 RUN npm install
 
 # Copy all source files
 COPY . .
 
-# Set build-time environment variable
+# Build-time arguments for Next.js public environment variables
+# These MUST be passed during docker build with --build-arg
 ARG NEXT_PUBLIC_SERVER_URL
-ENV NEXT_PUBLIC_SERVER_URL=$NEXT_PUBLIC_SERVER_URL
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-# Build the Next.js application using npm (more reliable for Next.js)
+# Create .env.production file with the build arguments
+# Next.js reads this file during build and bakes the values into the JS bundle
+RUN echo "NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL}" > .env.production && \
+    echo "NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}" >> .env.production && \
+    echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}" >> .env.production
+
+# Also set as ENV for the build process
+ENV NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL}
+ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+
+# Build the Next.js application
 RUN npm run build
 
 # Expose port
