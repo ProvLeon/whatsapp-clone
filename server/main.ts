@@ -216,6 +216,41 @@ const searchRooms = async (query: string): Promise<Room[]> => {
   return data || [];
 }
 
+async function updateRoom(
+  userId: string,
+  roomId: string,
+  updates: { name?: string; description?: string; avatar_url?: string }
+): Promise<{ success: boolean; room?: Room; error?: string }> {
+  // Check if user is admin/creator
+  const isAdmin = await isRoomAdminOrCreator(userId, roomId);
+  if (!isAdmin) {
+    return { success: false, error: "Only room admins can edit room details" };
+  }
+
+  // Build update object with only provided fields
+  const updateData: Record<string, string> = {};
+  if (updates.name !== undefined) updateData.name = updates.name;
+  if (updates.description !== undefined) updateData.description = updates.description;
+  if (updates.avatar_url !== undefined) updateData.avatar_url = updates.avatar_url;
+
+  if (Object.keys(updateData).length === 0) {
+    return { success: false, error: "No updates provided" };
+  }
+
+  const { data, error } = await supabase
+    .from("rooms")
+    .update(updateData)
+    .eq("id", roomId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Update room error:", error.message);
+    return { success: false, error: "Failed to update room" };
+  }
+
+  return { success: true, room: data as Room };
+}
 
 const joinRoom = async (userId: string, roomId: string): Promise<boolean> => {
   const { error } = await supabase.from("room_members").insert({
@@ -859,6 +894,24 @@ io.on("connection", async (socket: AuthenticatedSocket) => {
   socket.on("get_user_role_in_room", async (roomId: string, callback) => {
     const role = await getUserRoleInRoom(userId, roomId);
     callback({ role });
+  });
+
+  socket.on("update_room", async (data: { roomId: string; name?: string; description?: string; avatar_url?: string }, callback) => {
+    const result = await updateRoom(userId, data.roomId, {
+      name: data.name,
+      description: data.description,
+      avatar_url: data.avatar_url,
+    });
+
+    if (result.success && result.room) {
+      // Notify all room members about the update
+      io.to(`room:${data.roomId}`).emit("room_updated", {
+        room: result.room,
+        updatedBy: socket.profile,
+      });
+    }
+
+    callback({ success: result.success, room: result.room || null, error: result.error || null });
   });
 
   socket.on("get_room_members", async (roomId: string, callback) => {

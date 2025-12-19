@@ -23,6 +23,7 @@ import {
   getProfile,
   deleteRoom,
   getUserRoleInRoom,
+  updateRoom,
   Conversation,
   RoomMember,
 } from '@/lib/socket'
@@ -55,6 +56,8 @@ import {
   X,
   User,
   Trash2,
+  Camera,
+  Pencil,
 } from 'lucide-react'
 
 type ChatType = 'room' | 'conversation' | null
@@ -133,6 +136,15 @@ export default function Home() {
   const [userRoleInRoom, setUserRoleInRoom] = useState<string | null>(null)
   const [showDeleteRoomModal, setShowDeleteRoomModal] = useState(false)
   const [deletingRoom, setDeletingRoom] = useState(false)
+
+  // Room settings modal
+  const [showRoomSettingsModal, setShowRoomSettingsModal] = useState(false)
+  const [editRoomName, setEditRoomName] = useState('')
+  const [editRoomDesc, setEditRoomDesc] = useState('')
+  const [editRoomAvatar, setEditRoomAvatar] = useState('')
+  const [savingRoomSettings, setSavingRoomSettings] = useState(false)
+  const [uploadingRoomAvatar, setUploadingRoomAvatar] = useState(false)
+  const roomAvatarInputRef = useRef<HTMLInputElement>(null)
 
   const inputRef = useRef<RichMessageInputRef>(null)
   const messageEndRef = useRef<HTMLDivElement>(null)
@@ -529,10 +541,28 @@ export default function Home() {
       }
     }
 
+    const handleRoomUpdated = (data: { room: Room; updatedBy: Profile }) => {
+      // Update room in list
+      setRooms((prev) =>
+        prev.map((r) => (r.id === data.room.id ? data.room : r))
+      )
+
+      // If we're viewing this room, update active chat
+      if (activeChat?.id === data.room.id) {
+        setActiveChat({
+          ...activeChat,
+          name: data.room.name,
+          avatar: data.room.avatar_url,
+        })
+      }
+    }
+
     socket.on('room_deleted', handleRoomDeleted)
+    socket.on('room_updated', handleRoomUpdated)
 
     return () => {
       socket.off('room_deleted', handleRoomDeleted)
+      socket.off('room_updated', handleRoomUpdated)
     }
   }, [activeChat, addNotification])
 
@@ -780,6 +810,96 @@ export default function Home() {
   }, [activeChat])
 
   // Handle delete room (admin only)
+  // Handle open room settings
+  const handleOpenRoomSettings = useCallback(() => {
+    if (!activeChat || activeChat.type !== 'room') return
+
+    // Find the room to get current values
+    const room = rooms.find((r) => r.id === activeChat.id)
+    if (room) {
+      setEditRoomName(room.name)
+      setEditRoomDesc(room.description || '')
+      setEditRoomAvatar(room.avatar_url || '')
+      setShowRoomSettingsModal(true)
+    }
+  }, [activeChat, rooms])
+
+  // Handle save room settings
+  const handleSaveRoomSettings = useCallback(async () => {
+    if (!activeChat || activeChat.type !== 'room') return
+
+    setSavingRoomSettings(true)
+    const result = await updateRoom(activeChat.id, {
+      name: editRoomName,
+      description: editRoomDesc,
+      avatar_url: editRoomAvatar || undefined,
+    })
+
+    if (result.success && result.room) {
+      // Update local state
+      setRooms((prev) =>
+        prev.map((r) => (r.id === result.room!.id ? result.room! : r))
+      )
+      setActiveChat({
+        ...activeChat,
+        name: result.room.name,
+        avatar: result.room.avatar_url,
+      })
+      setShowRoomSettingsModal(false)
+      addNotification({
+        type: 'success',
+        title: 'Room Updated',
+        message: 'Room settings have been saved',
+      })
+    } else {
+      addNotification({
+        type: 'error',
+        title: 'Update Failed',
+        message: result.error || 'Failed to update room',
+      })
+    }
+
+    setSavingRoomSettings(false)
+  }, [activeChat, editRoomName, editRoomDesc, editRoomAvatar, addNotification])
+
+  // Handle room avatar upload
+  const handleRoomAvatarUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !activeChat) return
+
+    setUploadingRoomAvatar(true)
+
+    try {
+      const socket = getSocket()
+      socket?.emit('get_upload_url',
+        { bucket: 'avatars', fileName: file.name },
+        async (response: { signedUrl: string; path: string; publicUrl: string; error: string | null }) => {
+          if (response.error) {
+            console.error('Upload URL error:', response.error)
+            setUploadingRoomAvatar(false)
+            return
+          }
+
+          const uploadResponse = await fetch(response.signedUrl, {
+            method: 'PUT',
+            body: file,
+            headers: { 'Content-Type': file.type },
+          })
+
+          if (uploadResponse.ok) {
+            setEditRoomAvatar(response.publicUrl)
+          }
+          setUploadingRoomAvatar(false)
+        }
+      )
+    } catch (error) {
+      console.error('Room avatar upload failed:', error)
+      setUploadingRoomAvatar(false)
+    }
+
+    if (roomAvatarInputRef.current) roomAvatarInputRef.current.value = ''
+  }, [activeChat])
+
   const handleDeleteRoom = useCallback(async () => {
     if (!activeChat || activeChat.type !== 'room') return
 
@@ -1403,6 +1523,19 @@ export default function Home() {
                       )}
                       {activeChat.type === 'room' && (
                         <>
+                          {/* Room Settings - Admin/Creator only */}
+                          {(userRoleInRoom === 'admin' || userRoleInRoom === 'creator') && (
+                            <button
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                              onClick={() => {
+                                handleOpenRoomSettings()
+                                setShowChatMenu(false)
+                              }}
+                            >
+                              <Pencil className="w-4 h-4" />
+                              Room Settings
+                            </button>
+                          )}
                           <button
                             className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
                             onClick={() => {
@@ -1792,6 +1925,114 @@ export default function Home() {
               ) : (
                 <p className="text-center text-gray-500 py-8">No members found</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Room Settings Modal */}
+      {showRoomSettingsModal && activeChat?.type === 'room' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-semibold text-lg">Room Settings</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowRoomSettingsModal(false)}
+                disabled={savingRoomSettings}
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Room Avatar */}
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+                    {editRoomAvatar ? (
+                      <Image
+                        src={editRoomAvatar}
+                        alt="Room avatar"
+                        width={96}
+                        height={96}
+                        className="object-cover w-full h-full"
+                        unoptimized
+                      />
+                    ) : (
+                      <Hash className="w-10 h-10 text-gray-400" />
+                    )}
+                  </div>
+                  {uploadingRoomAvatar && (
+                    <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-white" />
+                    </div>
+                  )}
+                  <button
+                    className="absolute bottom-0 right-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white shadow-lg hover:bg-primary/90"
+                    onClick={() => roomAvatarInputRef.current?.click()}
+                    disabled={uploadingRoomAvatar}
+                  >
+                    <Camera className="w-4 h-4" />
+                  </button>
+                  <input
+                    ref={roomAvatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleRoomAvatarUpload}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-2">Click camera to change photo</p>
+              </div>
+
+              {/* Room Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Room Name
+                </label>
+                <Input
+                  value={editRoomName}
+                  onChange={(e) => setEditRoomName(e.target.value)}
+                  placeholder="Enter room name"
+                />
+              </div>
+
+              {/* Room Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <Input
+                  value={editRoomDesc}
+                  onChange={(e) => setEditRoomDesc(e.target.value)}
+                  placeholder="What's this room about?"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowRoomSettingsModal(false)}
+                disabled={savingRoomSettings}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSaveRoomSettings}
+                disabled={savingRoomSettings || !editRoomName.trim()}
+              >
+                {savingRoomSettings ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
+              </Button>
             </div>
           </div>
         </div>

@@ -177,6 +177,17 @@ export const getRoomMembers = (roomId: string): Promise<RoomMember[]> => {
   })
 }
 
+export const updateRoom = (
+  roomId: string,
+  updates: { name?: string; description?: string; avatar_url?: string }
+): Promise<{ success: boolean; room: Room | null; error: string | null }> => {
+  return new Promise((resolve) => {
+    socket?.emit('update_room', { roomId, ...updates }, (response: { success: boolean; room: Room | null; error: string | null }) => {
+      resolve(response)
+    })
+  })
+}
+
 export const deleteRoom = (roomId: string): Promise<{ success: boolean; error: string | null }> => {
   return new Promise((resolve) => {
     socket?.emit('delete_room', roomId, (response: { success: boolean; error: string | null }) => {
