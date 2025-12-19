@@ -1,10 +1,9 @@
 'use client'
 
-import { useSyncExternalStore, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001'
 
-// Module-level state
 type WakeUpStatus = 'idle' | 'waking' | 'awake' | 'error'
 
 interface WakeUpState {
@@ -13,127 +12,128 @@ interface WakeUpState {
   error: string | null
 }
 
-let state: WakeUpState = { status: 'idle', latency: null, error: null }
-const listeners: Set<() => void> = new Set()
-let wakeUpStarted = false
+// Module-level cache to persist across component remounts
+let cachedState: WakeUpState | null = null
+let wakeUpPromise: Promise<WakeUpState> | null = null
 
-function notifyListeners() {
-  listeners.forEach((listener) => listener())
-}
+async function performWakeUp(): Promise<WakeUpState> {
+  // Return cached result if available
+  if (cachedState && cachedState.status !== 'idle' && cachedState.status !== 'waking') {
+    return cachedState
+  }
 
-function subscribe(listener: () => void) {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-
-function getSnapshot(): WakeUpState {
-  return state
-}
-
-function getServerSnapshot(): WakeUpState {
-  // On server, return idle state
-  return { status: 'idle', latency: null, error: null }
-}
-
-async function performWakeUp() {
-  if (wakeUpStarted) return
-  wakeUpStarted = true
-
-  state = { status: 'waking', latency: null, error: null }
-  notifyListeners()
+  // Return existing promise if wake-up is in progress
+  if (wakeUpPromise) {
+    return wakeUpPromise
+  }
 
   const startTime = Date.now()
 
-  try {
-    console.log('[ServerWakeup] Pinging server to wake it up...')
+  wakeUpPromise = (async (): Promise<WakeUpState> => {
+    try {
+      console.log('[ServerWakeup] Pinging server to wake it up...')
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s timeout for cold starts
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s timeout for cold starts
 
-    const response = await fetch(`${SERVER_URL}/health`, {
-      method: 'GET',
-      signal: controller.signal,
-    })
+      const response = await fetch(`${SERVER_URL}/health`, {
+        method: 'GET',
+        signal: controller.signal,
+      })
 
-    clearTimeout(timeoutId)
+      clearTimeout(timeoutId)
 
-    const latency = Date.now() - startTime
+      const latency = Date.now() - startTime
 
-    if (response.ok) {
-      console.log(`[ServerWakeup] Server is awake! (${latency}ms)`)
-      state = { status: 'awake', latency, error: null }
-    } else {
-      console.warn(`[ServerWakeup] Server responded with status ${response.status}`)
-      state = { status: 'error', latency, error: `HTTP ${response.status}` }
+      if (response.ok) {
+        console.log(`[ServerWakeup] Server is awake! (${latency}ms)`)
+        cachedState = { status: 'awake', latency, error: null }
+      } else {
+        console.warn(`[ServerWakeup] Server responded with status ${response.status}`)
+        cachedState = { status: 'error', latency, error: `HTTP ${response.status}` }
+      }
+    } catch (error) {
+      const latency = Date.now() - startTime
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+      if (errorMessage.includes('abort')) {
+        console.warn('[ServerWakeup] Request timed out (server may still be starting)')
+        cachedState = { status: 'error', latency, error: 'timeout' }
+      } else {
+        console.error('[ServerWakeup] Failed to reach server:', errorMessage)
+        cachedState = { status: 'error', latency, error: errorMessage }
+      }
     }
-  } catch (error) {
-    const latency = Date.now() - startTime
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
-    if (errorMessage.includes('abort')) {
-      console.warn('[ServerWakeup] Request timed out (server may still be starting)')
-      state = { status: 'error', latency, error: 'timeout' }
-    } else {
-      console.error('[ServerWakeup] Failed to reach server:', errorMessage)
-      state = { status: 'error', latency, error: errorMessage }
-    }
-  }
+    return cachedState!
+  })()
 
-  notifyListeners()
+  return wakeUpPromise
 }
 
-// Start wake-up immediately when this module is loaded (client-side only)
+// Start wake-up immediately when module loads on client
 if (typeof window !== 'undefined') {
   performWakeUp()
 }
 
 interface ServerWakeupProps {
-  /**
-   * If true, shows a loading indicator while server is waking up
-   */
   showStatus?: boolean
-  /**
-   * Callback when server wake-up completes
-   */
   onWakeUp?: (success: boolean, latency?: number) => void
 }
 
-/**
- * ServerWakeup Component
- *
- * This component should be placed high in the component tree (e.g., in layout.tsx)
- * to ping the backend server as early as possible when the app loads.
- *
- * On Render's free tier, services spin down after inactivity. By pinging
- * immediately, the backend starts spinning up while the user sees the
- * frontend loading, reducing wait time.
- */
-export function ServerWakeup({ showStatus = false, onWakeUp }: ServerWakeupProps) {
-  const wakeUpState = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
-
-  // Call onWakeUp callback when status changes to awake or error
-  const handleCallback = useCallback(() => {
-    if (wakeUpState.status === 'awake') {
-      onWakeUp?.(true, wakeUpState.latency ?? undefined)
-    } else if (wakeUpState.status === 'error') {
-      onWakeUp?.(false)
-    }
-  }, [wakeUpState.status, wakeUpState.latency, onWakeUp])
-
-  // Trigger callback on status change
-  if (wakeUpState.status === 'awake' || wakeUpState.status === 'error') {
-    // This is safe because we're not calling setState
-    handleCallback()
+function getInitialState(): WakeUpState {
+  // Check cache first - this handles component remounts
+  if (cachedState) {
+    return cachedState
   }
+  // If wake-up already started, show waking status
+  if (wakeUpPromise) {
+    return { status: 'waking', latency: null, error: null }
+  }
+  return { status: 'idle', latency: null, error: null }
+}
 
-  // If not showing status, render nothing
+export function ServerWakeup({ showStatus = false, onWakeUp }: ServerWakeupProps) {
+  const [state, setState] = useState<WakeUpState>(getInitialState)
+  const mountedRef = useRef(true)
+  const hasCalledBackRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    // If we already have a final state from cache, call the callback
+    if (cachedState && (cachedState.status === 'awake' || cachedState.status === 'error')) {
+      if (!hasCalledBackRef.current) {
+        hasCalledBackRef.current = true
+        const isSuccess = cachedState.status === 'awake'
+        onWakeUp?.(isSuccess, cachedState.latency ?? undefined)
+      }
+      return
+    }
+
+    // Otherwise, wait for the wake-up to complete
+    performWakeUp().then((result) => {
+      if (mountedRef.current) {
+        setState(result)
+        if (!hasCalledBackRef.current) {
+          hasCalledBackRef.current = true
+          const isSuccess = result.status === 'awake'
+          onWakeUp?.(isSuccess, result.latency ?? undefined)
+        }
+      }
+    })
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [onWakeUp])
+
   if (!showStatus) {
     return null
   }
 
-  const { status, latency } = wakeUpState
+  const { status, latency } = state
 
-  // Render status indicator
   return (
     <div className="fixed bottom-4 right-4 z-50">
       {(status === 'idle' || status === 'waking') && (
