@@ -278,7 +278,53 @@ async function getRoomMembers(roomId: string): Promise<string[]> {
     console.error("Get room members error:", error.message);
     return [];
   }
-  return data?.map((m) => m.user_id) || [];
+
+  return data?.map((rm: any) => rm.user_id) || [];
+}
+
+async function getUserRoleInRoom(userId: string, roomId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("room_members")
+    .select("role")
+    .eq("room_id", roomId)
+    .eq("user_id", userId)
+    .single();
+
+  if (error || !data) return null;
+  return data.role;
+}
+
+async function isRoomAdminOrCreator(userId: string, roomId: string): Promise<boolean> {
+  const role = await getUserRoleInRoom(userId, roomId);
+  return role === "admin" || role === "creator";
+}
+
+async function inviteUserToRoom(inviterId: string, inviteeId: string, roomId: string): Promise<{ success: boolean; error?: string }> {
+  // Check if inviter is admin/creator
+  const isAdmin = await isRoomAdminOrCreator(inviterId, roomId);
+  if (!isAdmin) {
+    return { success: false, error: "Only room admins can invite users" };
+  }
+
+  // Check if user is already a member
+  const existingMembers = await getRoomMembers(roomId);
+  if (existingMembers.includes(inviteeId)) {
+    return { success: false, error: "User is already a member of this room" };
+  }
+
+  // Add user to room
+  const { error } = await supabase.from("room_members").insert({
+    room_id: roomId,
+    user_id: inviteeId,
+    role: "member",
+  });
+
+  if (error) {
+    console.error("Invite to room error:", error.message);
+    return { success: false, error: "Failed to invite user" };
+  }
+
+  return { success: true };
 }
 
 async function isUserInRoom(userId: string, roomId: string): Promise<boolean> {
@@ -501,43 +547,38 @@ async function deleteUserAccount(userId: string): Promise<boolean> {
 // AI AVATAR GENERATION
 // =====================================================
 
+// DiceBear style mappings
+const DICEBEAR_STYLES: Record<string, string> = {
+  cartoon: "adventurer",
+  realistic: "avataaars",
+  anime: "lorelei",
+  minimalist: "shapes",
+};
+
+function generateAvatarUrl(
+  seed: string,
+  style: "cartoon" | "realistic" | "anime" | "minimalist" = "cartoon"
+): string {
+  const dicebearStyle = DICEBEAR_STYLES[style] || "adventurer";
+  // DiceBear API v7 - generates consistent avatars based on seed
+  return `https://api.dicebear.com/7.x/${dicebearStyle}/svg?seed=${encodeURIComponent(seed)}&size=256`;
+}
+
 async function generateAIAvatar(
   prompt: string,
   style: "cartoon" | "realistic" | "anime" | "minimalist" = "cartoon"
 ): Promise<{ imageUrl: string | null; error: string | null }> {
-  if (!OPENROUTER_API_KEY) {
-    return { imageUrl: null, error: "OpenRouter API key not configured" };
-  }
-
-  const stylePrompts: Record<string, string> = {
-    cartoon: "colorful cartoon style avatar, friendly, fun",
-    realistic: "photorealistic portrait, professional headshot style",
-    anime: "anime style character portrait, vibrant colors",
-    minimalist: "minimalist geometric avatar, clean lines, modern design",
-  };
-
-  const fullPrompt = `Create a profile picture avatar: ${prompt}. Style: ${stylePrompts[style]}. Square format, centered, suitable for profile picture.`;
-
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "openai/dall-e-3",
-        messages: [{ role: "user", content: fullPrompt }],
-      }),
-    });
+    // Use the prompt as a seed for DiceBear - this creates unique but consistent avatars
+    const seed = prompt || `avatar_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const imageUrl = generateAvatarUrl(seed, style);
+
+    // Verify the URL works by making a HEAD request
+    const response = await fetch(imageUrl, { method: "HEAD" });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      return { imageUrl: null, error: errorData.message || "Failed to generate avatar" };
+      return { imageUrl: null, error: "Failed to generate avatar from DiceBear" };
     }
-
-    const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.content || null;
 
     return { imageUrl, error: null };
   } catch (error) {
@@ -735,6 +776,41 @@ io.on("connection", async (socket: AuthenticatedSocket) => {
     callback({ members });
   });
 
+  socket.on("invite_to_room", async (data: { roomId: string; userId: string }, callback) => {
+    const result = await inviteUserToRoom(userId, data.userId, data.roomId);
+
+    if (result.success) {
+      // Get room info to send to invited user
+      const { data: roomData } = await supabase
+        .from("rooms")
+        .select("*")
+        .eq("id", data.roomId)
+        .single();
+
+      // Notify the invited user if they're online
+      const invitedSocketId = userSocketMap.get(data.userId);
+      if (invitedSocketId) {
+        const invitedSocket = io.sockets.sockets.get(invitedSocketId);
+        if (invitedSocket && roomData) {
+          invitedSocket.join(`room:${data.roomId}`);
+          invitedSocket.emit("room_invitation", {
+            room: roomData,
+            invitedBy: socket.profile,
+          });
+        }
+      }
+
+      // Notify room members about new member
+      const invitedProfile = await getProfile(data.userId);
+      socket.to(`room:${data.roomId}`).emit("user_joined_room", {
+        roomId: data.roomId,
+        user: invitedProfile,
+      });
+    }
+
+    callback({ success: result.success, error: result.error || null });
+  });
+
   // ===================================================
   // CONVERSATION EVENTS
   // ===================================================
@@ -745,10 +821,19 @@ io.on("connection", async (socket: AuthenticatedSocket) => {
     if (conversationId) {
       socket.join(`conversation:${conversationId}`);
 
-      // Also join the other user if online
+      // Also join the other user if online and notify them of the new conversation
       const otherSocketId = userSocketMap.get(otherUserId);
       if (otherSocketId) {
-        io.sockets.sockets.get(otherSocketId)?.join(`conversation:${conversationId}`);
+        const otherSocket = io.sockets.sockets.get(otherSocketId);
+        if (otherSocket) {
+          otherSocket.join(`conversation:${conversationId}`);
+
+          // Emit new_conversation event to the other user so they see it in their list
+          otherSocket.emit("new_conversation", {
+            conversationId,
+            other_user: socket.profile,
+          });
+        }
       }
     }
 
