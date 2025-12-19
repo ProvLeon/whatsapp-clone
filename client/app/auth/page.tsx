@@ -76,7 +76,7 @@ export default function AuthPage() {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+          {/*<div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-4">
             <Image
               src="/logo_md.png"
               alt="WhatsApp Annex Logo"
@@ -84,8 +84,8 @@ export default function AuthPage() {
               height={60}
               className="object-contain"
             />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">WhatsApp Annex</h1>
+          </div>*/}
+          <h1 className="text-2xl font-bold text-primary">WhatsApp Annex</h1>
           <p className="text-gray-500 mt-1">
             {isLogin ? 'Welcome back!' : 'Create your account'}
           </p>

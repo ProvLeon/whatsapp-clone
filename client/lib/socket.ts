@@ -220,7 +220,7 @@ export const getUserRoleInRoom = (roomId: string): Promise<string | null> => {
 
     socket.emit('get_user_role_in_room', roomId, (response: { role: string | null }) => {
       clearTimeout(timeout)
-      console.log('getUserRoleInRoom response:', response)
+      // console.log('getUserRoleInRoom response:', response)
       resolve(response.role)
     })
   })

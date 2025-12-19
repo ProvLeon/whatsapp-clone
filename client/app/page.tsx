@@ -511,7 +511,7 @@ export default function Home() {
     const fetchUserRole = async () => {
       if (activeChat.type === 'room') {
         const role = await getUserRoleInRoom(activeChat.id)
-        console.log('User role in room:', role, 'for room:', activeChat.id)
+        // console.log('User role in room:', role, 'for room:', activeChat.id)
         setUserRoleInRoom(role)
       } else {
         setUserRoleInRoom(null)
