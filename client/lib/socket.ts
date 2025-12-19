@@ -2,6 +2,8 @@ import { io, Socket } from 'socket.io-client'
 import { Profile, Room, Message } from './supabase'
 
 let socket: Socket | null = null
+let isConnecting = false
+let connectionPromise: Promise<Socket> | null = null
 
 export interface Conversation {
   id: string
@@ -13,33 +15,71 @@ export interface Conversation {
 
 export const getSocket = (): Socket | null => socket
 
-export const initializeSocket = (token: string): Promise<Socket> => {
-  return new Promise((resolve, reject) => {
-    if (socket?.connected) {
-      resolve(socket)
-      return
-    }
+export const isSocketConnected = (): boolean => socket?.connected ?? false
 
+export const initializeSocket = (token: string): Promise<Socket> => {
+  // If already connected, return existing socket
+  if (socket?.connected) {
+    return Promise.resolve(socket)
+  }
+
+  // If connection is in progress, return the existing promise
+  if (isConnecting && connectionPromise) {
+    return connectionPromise
+  }
+
+  // If there's an existing disconnected socket, clean it up first
+  if (socket) {
+    socket.removeAllListeners()
+    socket.disconnect()
+    socket = null
+  }
+
+  isConnecting = true
+
+  connectionPromise = new Promise((resolve, reject) => {
     const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001'
 
     socket = io(serverUrl, {
       auth: { token },
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 10000,
     })
 
-    socket.on('connect', () => {
+    const onConnect = () => {
       console.log('Connected to server:', socket?.id)
+      isConnecting = false
+      connectionPromise = null
       resolve(socket!)
-    })
+    }
 
-    socket.on('connect_error', (error) => {
+    const onConnectError = (error: Error) => {
       console.error('Connection error:', error.message)
+      isConnecting = false
+      connectionPromise = null
+      // Clean up on error
+      if (socket) {
+        socket.removeAllListeners()
+        socket.disconnect()
+        socket = null
+      }
       reject(error)
-    })
+    }
+
+    socket.once('connect', onConnect)
+    socket.once('connect_error', onConnectError)
   })
+
+  return connectionPromise
 }
 
 export const disconnectSocket = () => {
+  isConnecting = false
+  connectionPromise = null
   if (socket) {
+    socket.removeAllListeners()
     socket.disconnect()
     socket = null
   }

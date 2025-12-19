@@ -753,6 +753,7 @@ export default function Home() {
                   width={40}
                   height={40}
                   className="object-cover w-full h-full"
+                  unoptimized
                 />
               ) : (
                 <span className="text-primary font-semibold text-lg">
@@ -858,6 +859,7 @@ export default function Home() {
                                   width={48}
                                   height={48}
                                   className="object-cover w-full h-full rounded-full"
+                                  unoptimized
                                 />
                               ) : (
                                 <Hash className="w-5 h-5 text-blue-600" />
@@ -918,6 +920,7 @@ export default function Home() {
                                     width={48}
                                     height={48}
                                     className="object-cover w-full h-full"
+                                    unoptimized
                                   />
                                 ) : (
                                   <span className="text-gray-600 font-semibold text-lg">
@@ -1025,6 +1028,7 @@ export default function Home() {
                                   width={48}
                                   height={48}
                                   className="object-cover w-full h-full"
+                                  unoptimized
                                 />
                               ) : (
                                 <span className="text-gray-600 font-semibold">
@@ -1175,6 +1179,7 @@ export default function Home() {
                         width={40}
                         height={40}
                         className="object-cover w-full h-full"
+                        unoptimized
                       />
                     ) : activeChat.type === 'room' ? (
                       <Hash className="w-5 h-5 text-blue-600" />
@@ -1247,7 +1252,7 @@ export default function Home() {
               ) : (
                 <div className="space-y-2">
                   {messages.map((msg) => {
-                    console.log('Rendering message:', msg.sender_id, user?.id)
+                    // console.log('Rendering message:', msg.sender_id, user?.id)
                     const isOwnMessage = msg.sender_id === user?.id
                     const isSystemMessage = msg.message_type === 'system'
 
@@ -1465,6 +1470,7 @@ export default function Home() {
                                 width={40}
                                 height={40}
                                 className="object-cover w-full h-full"
+                                unoptimized
                               />
                             ) : (
                               <span className="text-gray-600 font-semibold">

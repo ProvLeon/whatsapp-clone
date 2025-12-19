@@ -1,9 +1,9 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase, Profile } from './supabase'
-import { initializeSocket, disconnectSocket, getSocket } from './socket'
+import { initializeSocket, disconnectSocket, isSocketConnected } from './socket'
 
 interface AuthContextType {
   user: User | null
@@ -30,33 +30,84 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true)
   const [socketConnected, setSocketConnected] = useState(false)
 
+  // Use refs to prevent duplicate initializations
+  const initializingRef = useRef(false)
+  const mountedRef = useRef(true)
+
   useEffect(() => {
+    mountedRef.current = true
+
+    const connectSocket = async (accessToken: string) => {
+      // Prevent duplicate connection attempts
+      if (initializingRef.current || isSocketConnected()) {
+        return
+      }
+
+      initializingRef.current = true
+
+      try {
+        const socket = await initializeSocket(accessToken)
+
+        if (!mountedRef.current) {
+          // Component unmounted during connection, disconnect
+          disconnectSocket()
+          return
+        }
+
+        setSocketConnected(true)
+
+        // Remove any existing listener before adding new one
+        socket.off('authenticated')
+        socket.on('authenticated', (data: { profile: Profile }) => {
+          if (mountedRef.current) {
+            setProfile(data.profile)
+          }
+        })
+
+        // Handle disconnect/reconnect events
+        socket.off('disconnect')
+        socket.on('disconnect', () => {
+          if (mountedRef.current) {
+            setSocketConnected(false)
+          }
+        })
+
+        socket.off('connect')
+        socket.on('connect', () => {
+          if (mountedRef.current) {
+            setSocketConnected(true)
+          }
+        })
+      } catch (error) {
+        console.error('Socket connection failed:', error)
+      } finally {
+        initializingRef.current = false
+      }
+    }
+
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession()
+
+      if (!mountedRef.current) return
+
       setSession(session)
       setUser(session?.user ?? null)
 
       if (session?.access_token) {
-        try {
-          const socket = await initializeSocket(session.access_token)
-          setSocketConnected(true)
-
-          // Listen for authenticated event to get profile
-          socket.on('authenticated', (data: { profile: Profile }) => {
-            setProfile(data.profile)
-          })
-        } catch (error) {
-          console.error('Socket connection failed:', error)
-        }
+        await connectSocket(session.access_token)
       }
 
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
 
     initAuth()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event: string, session: Session | null) => {
+        if (!mountedRef.current) return
+
         console.log('Auth event:', event)
         setSession(session)
         setUser(session?.user ?? null)
@@ -65,25 +116,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           disconnectSocket()
           setSocketConnected(false)
           setProfile(null)
-        } else if (session?.access_token && !getSocket()?.connected) {
-          try {
-            const socket = await initializeSocket(session.access_token)
-            setSocketConnected(true)
-
-            socket.on('authenticated', (data: { profile: Profile }) => {
-              setProfile(data.profile)
-            })
-          } catch (error) {
-            console.error('Socket connection failed:', error)
-          }
+        } else if (session?.access_token && !isSocketConnected()) {
+          await connectSocket(session.access_token)
         }
 
-        setLoading(false)
+        if (mountedRef.current) {
+          setLoading(false)
+        }
       }
     )
 
     return () => {
+      mountedRef.current = false
       subscription.unsubscribe()
+      // Only disconnect if we're truly unmounting (not just re-rendering)
+      // In production, the AuthProvider shouldn't remount
       disconnectSocket()
     }
   }, [])

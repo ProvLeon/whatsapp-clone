@@ -561,7 +561,8 @@ function generateAvatarUrl(
 ): string {
   const dicebearStyle = DICEBEAR_STYLES[style] || "adventurer";
   // DiceBear API v7 - generates consistent avatars based on seed
-  return `https://api.dicebear.com/7.x/${dicebearStyle}/svg?seed=${encodeURIComponent(seed)}&size=256`;
+  // Using PNG format instead of SVG for Next.js Image compatibility
+  return `https://api.dicebear.com/7.x/${dicebearStyle}/png?seed=${encodeURIComponent(seed)}&size=256`;
 }
 
 async function generateAIAvatar(

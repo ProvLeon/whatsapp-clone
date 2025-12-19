@@ -82,6 +82,7 @@ export function Toast({ notification, onDismiss }: ToastProps) {
                 width={40}
                 height={40}
                 className="object-cover w-full h-full"
+                unoptimized
               />
             </div>
           ) : (
