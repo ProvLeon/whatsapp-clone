@@ -1,5 +1,37 @@
 @import "tailwindcss";
 @import 'tw-animate-css';
+
+/* Fix for mobile viewport height when keyboard appears */
+html,
+body {
+    height: 100%;
+}
+
+/* Use dvh with fallback for older browsers */
+@supports (height: 100dvh) {
+    .h-dvh {
+        height: 100dvh !important;
+    }
+}
+
+@supports not (height: 100dvh) {
+    .h-dvh {
+        height: 100vh !important;
+        height: -webkit-fill-available !important;
+    }
+}
+
+/* Enable smooth touch scrolling on iOS */
+.overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+/* Prevent body scroll when chat is open on mobile */
+.fixed.inset-0 {
+    overflow: hidden;
+}
+
 /*---break---*/
 @custom-variant dark (&:is(.dark *));
 

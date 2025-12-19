@@ -993,7 +993,7 @@ export default function Home() {
   }
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden">
+    <div className="h-dvh bg-background flex overflow-hidden fixed inset-0">
       {/* Sidebar */}
       <div
         className={`w-full md:w-80 lg:w-96 bg-white border-r flex flex-col ${showMobileChat ? 'hidden md:flex' : 'flex'
@@ -1382,13 +1382,13 @@ export default function Home() {
 
       {/* Chat Area */}
       <div
-        className={`flex-1 flex flex-col bg-gray-50 overflow-hidden min-h-0 ${!showMobileChat ? 'hidden md:flex' : 'flex'
+        className={`flex-1 flex flex-col bg-gray-50 relative ${!showMobileChat ? 'hidden md:flex' : 'flex'
           }`}
       >
         {activeChat ? (
-          <>
+          <div className="absolute inset-0 flex flex-col">
             {/* Chat Header */}
-            <div className="h-16 px-4 border-b flex items-center justify-between bg-background flex-shrink-0 sticky top-0 z-10">
+            <div className="h-16 px-4 border-b flex items-center justify-between bg-background shrink-0 z-10">
               <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
@@ -1656,7 +1656,7 @@ export default function Home() {
             </div>
 
             {/* Message Input */}
-            <div className="p-4 bg-white border-t flex-shrink-0 sticky bottom-0">
+            <div className="p-4 bg-white border-t shrink-0 z-10">
               <div className="flex items-end gap-2 relative">
                 {/* Emoji Picker */}
                 <EmojiPicker
@@ -1724,7 +1724,7 @@ export default function Home() {
                 </Button>
               </div>
             </div>
-          </>
+          </div>
         ) : (
           /* No Chat Selected */
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
