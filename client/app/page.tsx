@@ -1382,13 +1382,13 @@ export default function Home() {
 
       {/* Chat Area */}
       <div
-        className={`flex-1 flex flex-col bg-gray-50 ${!showMobileChat ? 'hidden md:flex' : 'flex'
+        className={`flex-1 flex flex-col bg-gray-50 overflow-hidden min-h-0 ${!showMobileChat ? 'hidden md:flex' : 'flex'
           }`}
       >
         {activeChat ? (
           <>
             {/* Chat Header */}
-            <div className="h-16 px-4 border-b flex items-center justify-between bg-background">
+            <div className="h-16 px-4 border-b flex items-center justify-between bg-background flex-shrink-0 sticky top-0 z-10">
               <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
@@ -1555,7 +1555,7 @@ export default function Home() {
 
             {/* Messages Area */}
             <div
-              className="flex-1 overflow-y-auto p-4 bg-background"
+              className="flex-1 overflow-y-auto p-4 bg-background min-h-0"
               style={{
                 backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23e5e7eb' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
               }}
@@ -1656,7 +1656,7 @@ export default function Home() {
             </div>
 
             {/* Message Input */}
-            <div className="p-4 bg-white border-t">
+            <div className="p-4 bg-white border-t flex-shrink-0 sticky bottom-0">
               <div className="flex items-end gap-2 relative">
                 {/* Emoji Picker */}
                 <EmojiPicker
