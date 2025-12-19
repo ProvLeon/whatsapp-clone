@@ -16,6 +16,9 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'raw.github.com'
+      }, {
+        protocol: 'https',
+        hostname: 'toerbsqgqirmkqnxtwrc.supabase.co'
       }
     ]
   }
