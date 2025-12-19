@@ -188,10 +188,11 @@ const createRoom = async (userId: string, name: string, description?: string, is
     return null;
   }
 
+  // Add creator as member with "creator" role (highest privilege)
   await supabase.from("room_members").insert({
     room_id: room.id,
     user_id: userId,
-    role: "admin",
+    role: "creator",
   })
 
   return room
@@ -283,6 +284,7 @@ async function getRoomMembers(roomId: string): Promise<string[]> {
 }
 
 async function getUserRoleInRoom(userId: string, roomId: string): Promise<string | null> {
+  // First check room_members table
   const { data, error } = await supabase
     .from("room_members")
     .select("role")
@@ -290,8 +292,31 @@ async function getUserRoleInRoom(userId: string, roomId: string): Promise<string
     .eq("user_id", userId)
     .single();
 
-  if (error || !data) return null;
-  return data.role;
+  if (!error && data?.role) {
+    return data.role;
+  }
+
+  // Fallback: check if user is the room creator (for legacy rooms)
+  const { data: roomData } = await supabase
+    .from("rooms")
+    .select("created_by")
+    .eq("id", roomId)
+    .single();
+
+  if (roomData?.created_by === userId) {
+    // User is creator but role wasn't set correctly - fix it
+    await supabase
+      .from("room_members")
+      .upsert({
+        room_id: roomId,
+        user_id: userId,
+        role: "creator",
+      }, { onConflict: "room_id,user_id" });
+
+    return "creator";
+  }
+
+  return data?.role || null;
 }
 
 async function isRoomAdminOrCreator(userId: string, roomId: string): Promise<boolean> {
@@ -322,6 +347,49 @@ async function inviteUserToRoom(inviterId: string, inviteeId: string, roomId: st
   if (error) {
     console.error("Invite to room error:", error.message);
     return { success: false, error: "Failed to invite user" };
+  }
+
+  return { success: true };
+}
+
+async function deleteRoom(userId: string, roomId: string): Promise<{ success: boolean; error?: string }> {
+  // Check if user is admin/creator
+  const isAdmin = await isRoomAdminOrCreator(userId, roomId);
+  if (!isAdmin) {
+    return { success: false, error: "Only room admins can delete the room" };
+  }
+
+  // Delete all messages in the room
+  const { error: messagesError } = await supabase
+    .from("messages")
+    .delete()
+    .eq("room_id", roomId);
+
+  if (messagesError) {
+    console.error("Delete room messages error:", messagesError.message);
+    return { success: false, error: "Failed to delete room messages" };
+  }
+
+  // Delete all room members
+  const { error: membersError } = await supabase
+    .from("room_members")
+    .delete()
+    .eq("room_id", roomId);
+
+  if (membersError) {
+    console.error("Delete room members error:", membersError.message);
+    return { success: false, error: "Failed to delete room members" };
+  }
+
+  // Delete the room itself
+  const { error: roomError } = await supabase
+    .from("rooms")
+    .delete()
+    .eq("id", roomId);
+
+  if (roomError) {
+    console.error("Delete room error:", roomError.message);
+    return { success: false, error: "Failed to delete room" };
   }
 
   return { success: true };
@@ -765,14 +833,61 @@ io.on("connection", async (socket: AuthenticatedSocket) => {
     callback({ rooms });
   });
 
-  socket.on("get_room_members", async (roomId: string, callback) => {
-    const memberIds = await getRoomMembers(roomId);
-    const members: Profile[] = [];
+  socket.on("delete_room", async (roomId: string, callback) => {
+    const result = await deleteRoom(userId, roomId);
 
-    for (const memberId of memberIds) {
-      const profile = await getProfile(memberId);
-      if (profile) members.push(profile);
+    if (result.success) {
+      // Notify all members that the room is deleted
+      io.to(`room:${roomId}`).emit("room_deleted", {
+        roomId,
+        deletedBy: socket.profile,
+      });
+
+      // Remove all sockets from the room
+      const socketsInRoom = await io.in(`room:${roomId}`).fetchSockets();
+      for (const s of socketsInRoom) {
+        s.leave(`room:${roomId}`);
+      }
+
+      // Clean up local tracking
+      connectedUsers.get(socket.id)?.rooms.delete(roomId);
     }
+
+    callback({ success: result.success, error: result.error || null });
+  });
+
+  socket.on("get_user_role_in_room", async (roomId: string, callback) => {
+    const role = await getUserRoleInRoom(userId, roomId);
+    callback({ role });
+  });
+
+  socket.on("get_room_members", async (roomId: string, callback) => {
+    // Get members with their roles
+    const { data: memberData, error } = await supabase
+      .from("room_members")
+      .select("user_id, role")
+      .eq("room_id", roomId);
+
+    if (error) {
+      console.error("Get room members error:", error.message);
+      callback({ members: [] });
+      return;
+    }
+
+    const members: (Profile & { role?: string })[] = [];
+
+    for (const member of memberData || []) {
+      const profile = await getProfile(member.user_id);
+      if (profile) {
+        members.push({ ...profile, role: member.role });
+      }
+    }
+
+    // Sort: creator first, then admins, then members
+    members.sort((a, b) => {
+      const roleOrder: Record<string, number> = { creator: 0, admin: 1, member: 2 };
+      return (roleOrder[a.role || 'member'] || 2) - (roleOrder[b.role || 'member'] || 2);
+    });
 
     callback({ members });
   });

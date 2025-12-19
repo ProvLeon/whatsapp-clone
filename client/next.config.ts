@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
   reactStrictMode: false,
 
   images: {
+    // Allow SVG images from external sources (for DiceBear avatars)
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     remotePatterns: [
       {
         protocol: 'https',

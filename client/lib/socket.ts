@@ -165,6 +165,48 @@ export const inviteToRoom = (roomId: string, userId: string): Promise<{ success:
   })
 }
 
+export interface RoomMember extends Profile {
+  role?: 'creator' | 'admin' | 'member'
+}
+
+export const getRoomMembers = (roomId: string): Promise<RoomMember[]> => {
+  return new Promise((resolve) => {
+    socket?.emit('get_room_members', roomId, (response: { members: RoomMember[] }) => {
+      resolve(response.members || [])
+    })
+  })
+}
+
+export const deleteRoom = (roomId: string): Promise<{ success: boolean; error: string | null }> => {
+  return new Promise((resolve) => {
+    socket?.emit('delete_room', roomId, (response: { success: boolean; error: string | null }) => {
+      resolve(response)
+    })
+  })
+}
+
+export const getUserRoleInRoom = (roomId: string): Promise<string | null> => {
+  return new Promise((resolve) => {
+    if (!socket?.connected) {
+      console.warn('Socket not connected when fetching user role')
+      resolve(null)
+      return
+    }
+
+    // Add timeout in case callback never fires
+    const timeout = setTimeout(() => {
+      console.warn('getUserRoleInRoom timed out')
+      resolve(null)
+    }, 5000)
+
+    socket.emit('get_user_role_in_room', roomId, (response: { role: string | null }) => {
+      clearTimeout(timeout)
+      console.log('getUserRoleInRoom response:', response)
+      resolve(response.role)
+    })
+  })
+}
+
 // =====================================================
 // CONVERSATION OPERATIONS
 // =====================================================

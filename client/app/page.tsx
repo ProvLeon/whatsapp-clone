@@ -19,7 +19,12 @@ import {
   leaveRoom,
   createRoom,
   inviteToRoom,
+  getRoomMembers,
+  getProfile,
+  deleteRoom,
+  getUserRoleInRoom,
   Conversation,
+  RoomMember,
 } from '@/lib/socket'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,6 +53,8 @@ import {
   Hash,
   UserPlus2,
   X,
+  User,
+  Trash2,
 } from 'lucide-react'
 
 type ChatType = 'room' | 'conversation' | null
@@ -109,6 +116,24 @@ export default function Home() {
   const [inviteSearching, setInviteSearching] = useState(false)
   const [inviting, setInviting] = useState<string | null>(null)
 
+  // Chat menu dropdown
+  const [showChatMenu, setShowChatMenu] = useState(false)
+  const chatMenuRef = useRef<HTMLDivElement>(null)
+
+  // Profile modal
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [viewingProfile, setViewingProfile] = useState<Profile | null>(null)
+
+  // Room members modal
+  const [showMembersModal, setShowMembersModal] = useState(false)
+  const [roomMembers, setRoomMembers] = useState<RoomMember[]>([])
+  const [loadingMembers, setLoadingMembers] = useState(false)
+
+  // Room admin/delete
+  const [userRoleInRoom, setUserRoleInRoom] = useState<string | null>(null)
+  const [showDeleteRoomModal, setShowDeleteRoomModal] = useState(false)
+  const [deletingRoom, setDeletingRoom] = useState(false)
+
   const inputRef = useRef<RichMessageInputRef>(null)
   const messageEndRef = useRef<HTMLDivElement>(null)
 
@@ -157,6 +182,23 @@ export default function Home() {
       router.push('/auth')
     }
   }, [user, authLoading, router])
+
+  // Close chat menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (chatMenuRef.current && !chatMenuRef.current.contains(event.target as Node)) {
+        setShowChatMenu(false)
+      }
+    }
+
+    if (showChatMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showChatMenu])
 
   // Load rooms and conversations when socket connects
   useEffect(() => {
@@ -451,8 +493,48 @@ export default function Home() {
       setLoadingMessages(false)
     }
 
+    // Fetch user role if it's a room
+    const fetchUserRole = async () => {
+      if (activeChat.type === 'room') {
+        const role = await getUserRoleInRoom(activeChat.id)
+        console.log('User role in room:', role, 'for room:', activeChat.id)
+        setUserRoleInRoom(role)
+      } else {
+        setUserRoleInRoom(null)
+      }
+    }
+
     loadMessages()
+    fetchUserRole()
   }, [activeChat, socketConnected, clearUnread])
+
+  // Listen for room_deleted event
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket) return
+
+    const handleRoomDeleted = (data: { roomId: string; deletedBy: Profile }) => {
+      // Remove room from list
+      setRooms((prev) => prev.filter((r) => r.id !== data.roomId))
+
+      // If we're viewing the deleted room, clear active chat
+      if (activeChat?.id === data.roomId) {
+        setActiveChat(null)
+        setShowMobileChat(false)
+        addNotification({
+          type: 'info',
+          title: 'Room Deleted',
+          message: `"${activeChat.name}" was deleted by ${data.deletedBy.display_name || data.deletedBy.username}`,
+        })
+      }
+    }
+
+    socket.on('room_deleted', handleRoomDeleted)
+
+    return () => {
+      socket.off('room_deleted', handleRoomDeleted)
+    }
+  }, [activeChat, addNotification])
 
   // Search functionality
   useEffect(() => {
@@ -675,6 +757,59 @@ export default function Home() {
     }
     setCreatingRoom(false)
   }, [newRoomName, newRoomDesc])
+
+  // Handle view profile
+  const handleViewProfile = useCallback(async (userId: string) => {
+    const profileData = await getProfile(userId)
+    if (profileData) {
+      setViewingProfile(profileData)
+      setShowProfileModal(true)
+    }
+  }, [])
+
+  // Handle view room members
+  const handleViewMembers = useCallback(async () => {
+    if (!activeChat || activeChat.type !== 'room') return
+
+    setLoadingMembers(true)
+    setShowMembersModal(true)
+
+    const members = await getRoomMembers(activeChat.id)
+    setRoomMembers(members)
+    setLoadingMembers(false)
+  }, [activeChat])
+
+  // Handle delete room (admin only)
+  const handleDeleteRoom = useCallback(async () => {
+    if (!activeChat || activeChat.type !== 'room') return
+
+    setDeletingRoom(true)
+    const result = await deleteRoom(activeChat.id)
+
+    if (result.success) {
+      setShowDeleteRoomModal(false)
+      setActiveChat(null)
+      setShowMobileChat(false)
+
+      // Refresh rooms list
+      const roomsData = await getRooms()
+      setRooms(roomsData)
+
+      addNotification({
+        type: 'success',
+        title: 'Room Deleted',
+        message: `"${activeChat.name}" has been deleted`,
+      })
+    } else {
+      addNotification({
+        type: 'error',
+        title: 'Delete Failed',
+        message: result.error || 'Failed to delete room',
+      })
+    }
+
+    setDeletingRoom(false)
+  }, [activeChat, addNotification])
 
   // Handle invite search
   useEffect(() => {
@@ -1226,9 +1361,98 @@ export default function Home() {
                     <UserPlus2 className="w-5 h-5" />
                   </Button>
                 )}
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="w-5 h-5" />
-                </Button>
+                <div className="relative" ref={chatMenuRef}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowChatMenu(!showChatMenu)}
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </Button>
+
+                  {/* Dropdown Menu */}
+                  {showChatMenu && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border py-1 z-50">
+                      {activeChat.type === 'conversation' && (
+                        <>
+                          <button
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                            onClick={() => {
+                              // Find the other user's ID from the conversation
+                              const conv = conversations.find(c => c.id === activeChat.id)
+                              if (conv?.other_user?.id) {
+                                handleViewProfile(conv.other_user.id)
+                              }
+                              setShowChatMenu(false)
+                            }}
+                          >
+                            <User className="w-4 h-4" />
+                            View Profile
+                          </button>
+                          <button
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-red-600"
+                            onClick={() => {
+                              // Clear chat functionality
+                              setShowChatMenu(false)
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Clear Chat
+                          </button>
+                        </>
+                      )}
+                      {activeChat.type === 'room' && (
+                        <>
+                          <button
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                            onClick={() => {
+                              setShowInviteModal(true)
+                              setShowChatMenu(false)
+                            }}
+                          >
+                            <UserPlus2 className="w-4 h-4" />
+                            Invite Members
+                          </button>
+                          <button
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                            onClick={() => {
+                              handleViewMembers()
+                              setShowChatMenu(false)
+                            }}
+                          >
+                            <Users className="w-4 h-4" />
+                            View Members
+                          </button>
+                          <div className="border-t my-1" />
+                          <button
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-red-600"
+                            onClick={() => {
+                              handleLeaveRoom()
+                              setShowChatMenu(false)
+                            }}
+                          >
+                            <DoorOpen className="w-4 h-4" />
+                            Leave Room
+                          </button>
+                          {/* Delete Room - Admin/Creator only */}
+                          {/* Debug: userRoleInRoom = {userRoleInRoom} */}
+                          {(userRoleInRoom === 'admin' || userRoleInRoom === 'creator') ? (
+                            <button
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium"
+                              onClick={() => {
+                                setShowDeleteRoomModal(true)
+                                setShowChatMenu(false)
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete Room
+                            </button>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1419,6 +1643,213 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Profile Modal */}
+      {showProfileModal && viewingProfile && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-semibold text-lg">Profile</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setShowProfileModal(false)
+                  setViewingProfile(null)
+                }}
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            <div className="p-6 flex flex-col items-center">
+              <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden mb-4">
+                {viewingProfile.avatar_url ? (
+                  <Image
+                    src={viewingProfile.avatar_url}
+                    alt=""
+                    width={96}
+                    height={96}
+                    className="object-cover w-full h-full"
+                    unoptimized
+                  />
+                ) : (
+                  <span className="text-gray-600 font-semibold text-3xl">
+                    {viewingProfile.username[0].toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <h4 className="text-xl font-semibold text-gray-900">
+                {viewingProfile.display_name || viewingProfile.username}
+              </h4>
+              <p className="text-gray-500">@{viewingProfile.username}</p>
+              {viewingProfile.bio && (
+                <p className="text-gray-600 text-center mt-3 text-sm">{viewingProfile.bio}</p>
+              )}
+              {viewingProfile.status && (
+                <p className="text-gray-500 text-center mt-2 text-xs italic">&ldquo;{viewingProfile.status}&rdquo;</p>
+              )}
+              <div className="flex items-center gap-2 mt-4">
+                <div className={`w-2 h-2 rounded-full ${viewingProfile.is_online ? 'bg-green-500' : 'bg-gray-400'}`} />
+                <span className="text-sm text-gray-500">
+                  {viewingProfile.is_online ? 'Online' : 'Offline'}
+                </span>
+              </div>
+            </div>
+            <div className="p-4 border-t">
+              <Button
+                className="w-full"
+                onClick={() => {
+                  setShowProfileModal(false)
+                  setViewingProfile(null)
+                }}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Room Members Modal */}
+      {showMembersModal && activeChat?.type === 'room' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-semibold text-lg">Members of {activeChat.name}</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setShowMembersModal(false)
+                  setRoomMembers([])
+                }}
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            <div className="p-4 max-h-96 overflow-y-auto">
+              {loadingMembers ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : roomMembers.length > 0 ? (
+                <div className="space-y-2">
+                  {roomMembers.map((member) => (
+                    <div
+                      key={member.id}
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="relative">
+                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+                          {member.avatar_url ? (
+                            <Image
+                              src={member.avatar_url}
+                              alt=""
+                              width={40}
+                              height={40}
+                              className="object-cover w-full h-full"
+                              unoptimized
+                            />
+                          ) : (
+                            <span className="text-gray-600 font-semibold">
+                              {member.username[0].toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        {member.is_online && (
+                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900 flex items-center gap-2">
+                          {member.display_name || member.username}
+                          {member.id === user?.id && (
+                            <span className="text-xs text-gray-500">(You)</span>
+                          )}
+                          {member.role === 'creator' && (
+                            <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-medium">Creator</span>
+                          )}
+                          {member.role === 'admin' && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Admin</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-gray-500">@{member.username}</p>
+                      </div>
+                      {member.id !== user?.id && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            handleViewProfile(member.id)
+                          }}
+                        >
+                          View
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-gray-500 py-8">No members found</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Room Confirmation Modal */}
+      {showDeleteRoomModal && activeChat?.type === 'room' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-semibold text-lg text-red-600">Delete Room</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowDeleteRoomModal(false)}
+                disabled={deletingRoom}
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mx-auto mb-4">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h4 className="text-center font-semibold text-gray-900 mb-2">
+                Delete &ldquo;{activeChat.name}&rdquo;?
+              </h4>
+              <p className="text-center text-gray-500 text-sm mb-6">
+                This will permanently delete the room, remove all members, and delete all messages. This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowDeleteRoomModal(false)}
+                  disabled={deletingRoom}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                  onClick={handleDeleteRoom}
+                  disabled={deletingRoom}
+                >
+                  {deletingRoom ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Room'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Room Invite Modal */}
       {showInviteModal && activeChat?.type === 'room' && (
