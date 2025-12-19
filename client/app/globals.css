@@ -183,3 +183,19 @@
 .animate-slide-in {
     animation: slideIn 0.2s ease-out;
 }
+
+/* Fade out animation for server wake-up status */
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+        visibility: hidden;
+    }
+}
+
+.animate-fade-out {
+    animation: fadeOut 0.5s ease-out 3s forwards;
+}

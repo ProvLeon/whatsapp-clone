@@ -727,7 +727,36 @@ async function getPublicUrl(bucket: string, path: string): Promise<string> {
 // SOCKET.IO SERVER
 // =====================================================
 
-const server = createServer();
+const server = createServer((req, res) => {
+  // Health check endpoint for wake-up pings
+  if (req.url === "/health" || req.url === "/") {
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
+    });
+    res.end(JSON.stringify({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      uptime: performance.now() / 1000
+    }));
+    return;
+  }
+
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type"
+    });
+    res.end();
+    return;
+  }
+
+  // 404 for other routes
+  res.writeHead(404, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "Not found" }));
+});
 
 const io = new Server(server, {
   cors: {
