@@ -99,7 +99,15 @@ export const getProfile = (userId: string): Promise<Profile | null> => {
 
 export const updateProfile = (updates: Partial<Profile>): Promise<Profile | null> => {
   return new Promise((resolve) => {
-    socket?.emit('update_profile', updates, (response: { profile: Profile | null }) => {
+    if (!socket?.connected) {
+      console.error('updateProfile: Socket not connected')
+      resolve(null)
+      return
+    }
+    socket.emit('update_profile', updates, (response: { profile: Profile | null; error?: string }) => {
+      if (response.error) {
+        console.error('updateProfile error:', response.error)
+      }
       resolve(response.profile)
     })
   })

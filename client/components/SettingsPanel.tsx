@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import Image from 'next/image'
+import { useState, useRef } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { useNotifications } from '@/lib/notifications'
 import { getSocket, updateProfile, generateAvatar, clearAllMessages, deleteAccount } from '@/lib/socket'
@@ -24,68 +23,8 @@ import {
   VolumeX,
   Smile,
 } from 'lucide-react'
-import {
-  AnimatedAvatarPicker,
-  AnimatedEmojiAvatar,
-  parseAvatarUrl,
-  ANIMATED_EMOJIS,
-  getAnimationClass,
-} from '@/components/AnimatedAvatarPicker'
-
-// Inject animation styles for animated emoji avatars
-const animationStyles = `
-  @keyframes avatar-bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
-  }
-  @keyframes avatar-pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.15); }
-  }
-  @keyframes avatar-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-  @keyframes avatar-shake {
-    0%, 100% { transform: translateX(0) rotate(0deg); }
-    25% { transform: translateX(-3px) rotate(-5deg); }
-    75% { transform: translateX(3px) rotate(5deg); }
-  }
-  @keyframes avatar-wiggle {
-    0%, 100% { transform: rotate(0deg); }
-    25% { transform: rotate(-10deg); }
-    75% { transform: rotate(10deg); }
-  }
-  @keyframes avatar-float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
-  }
-  @keyframes avatar-heartbeat {
-    0%, 100% { transform: scale(1); }
-    14% { transform: scale(1.2); }
-    28% { transform: scale(1); }
-    42% { transform: scale(1.2); }
-    70% { transform: scale(1); }
-  }
-  @keyframes avatar-wave {
-    0%, 100% { transform: rotate(0deg); }
-    10% { transform: rotate(14deg); }
-    20% { transform: rotate(-8deg); }
-    30% { transform: rotate(14deg); }
-    40% { transform: rotate(-4deg); }
-    50% { transform: rotate(10deg); }
-    60% { transform: rotate(0deg); }
-  }
-
-  .animate-avatar-bounce { animation: avatar-bounce 0.8s ease-in-out infinite; }
-  .animate-avatar-pulse { animation: avatar-pulse 1.2s ease-in-out infinite; }
-  .animate-avatar-spin { animation: avatar-spin 3s linear infinite; }
-  .animate-avatar-shake { animation: avatar-shake 0.5s ease-in-out infinite; }
-  .animate-avatar-wiggle { animation: avatar-wiggle 0.8s ease-in-out infinite; }
-  .animate-avatar-float { animation: avatar-float 2s ease-in-out infinite; }
-  .animate-avatar-heartbeat { animation: avatar-heartbeat 1.5s ease-in-out infinite; }
-  .animate-avatar-wave { animation: avatar-wave 1.8s ease-in-out infinite; }
-`
+import { AnimatedAvatarPicker, parseAvatarUrl } from '@/components/AnimatedAvatarPicker'
+import { Avatar } from '@/components/Avatar'
 
 interface SettingsPanelProps {
   onBack: () => void
@@ -94,7 +33,7 @@ interface SettingsPanelProps {
 type AvatarStyle = 'cartoon' | 'realistic' | 'anime' | 'minimalist'
 
 export const SettingsPanel = ({ onBack }: SettingsPanelProps) => {
-  const { profile } = useAuth()
+  const { profile, updateProfileInContext } = useAuth()
   const {
     soundEnabled,
     setSoundEnabled,
@@ -123,18 +62,7 @@ export const SettingsPanel = ({ onBack }: SettingsPanelProps) => {
 
   // Parse current avatar to check if it's an animated emoji
   const parsedAvatar = parseAvatarUrl(avatarUrl)
-  const currentAnimatedEmoji = parsedAvatar.type === 'animated-emoji' ? parsedAvatar.emoji : null
-
-  // Inject animation styles on mount
-  useEffect(() => {
-    const styleId = 'settings-panel-avatar-styles'
-    if (!document.getElementById(styleId)) {
-      const styleElement = document.createElement('style')
-      styleElement.id = styleId
-      styleElement.textContent = animationStyles
-      document.head.appendChild(styleElement)
-    }
-  }, [])
+  const isAnimatedEmoji = parsedAvatar.type === 'animated-emoji'
 
   // Notifications
   const [requestingPermission, setRequestingPermission] = useState(false)
@@ -159,6 +87,13 @@ export const SettingsPanel = ({ onBack }: SettingsPanelProps) => {
 
     setSaving(false)
     if (updated) {
+      // Update the auth context with new profile data
+      updateProfileInContext({
+        display_name: displayName || null,
+        bio: bio || null,
+        status: status || null,
+        avatar_url: avatarUrl || null,
+      })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     }
@@ -189,6 +124,11 @@ export const SettingsPanel = ({ onBack }: SettingsPanelProps) => {
 
           if (uploadResponse.ok) {
             setAvatarUrl(response.publicUrl)
+            // Save to profile and update context
+            const updatedProfile = await updateProfile({ avatar_url: response.publicUrl })
+            if (updatedProfile) {
+              updateProfileInContext({ avatar_url: response.publicUrl })
+            }
           }
           setUploadingAvatar(false)
         }
@@ -213,6 +153,8 @@ export const SettingsPanel = ({ onBack }: SettingsPanelProps) => {
       const updatedProfile = await updateProfile({ avatar_url: result.imageUrl })
       if (updatedProfile) {
         console.log('Avatar saved to profile successfully')
+        // Update the auth context with the new avatar
+        updateProfileInContext({ avatar_url: result.imageUrl })
       }
 
       setShowAvatarGenerator(false)
@@ -229,19 +171,43 @@ export const SettingsPanel = ({ onBack }: SettingsPanelProps) => {
   // Handle animated emoji selection
   const handleAnimatedEmojiSelect = async (avatar: {
     type: 'animated-emoji'
-    emojiId: string
-    emoji: string
-    color: string
-    animation: string
+    emojiUrl: string
+    emojiName: string
   }) => {
-    // Store as a special URL format: animated-emoji:emojiId
-    const animatedAvatarUrl = `animated-emoji:${avatar.emojiId}`
-    setAvatarUrl(animatedAvatarUrl)
+    console.log('Selecting animated emoji:', avatar.emojiName, avatar.emojiUrl)
 
-    // Save to profile
-    const updatedProfile = await updateProfile({ avatar_url: animatedAvatarUrl })
-    if (updatedProfile) {
-      console.log('Animated emoji avatar saved successfully')
+    // Check if socket is connected
+    const socket = getSocket()
+    if (!socket?.connected) {
+      console.error('Socket not connected, cannot save avatar')
+      alert('Connection error. Please try again.')
+      return
+    }
+
+    // Store the Telegram animated emoji URL directly
+    setAvatarUrl(avatar.emojiUrl)
+
+    try {
+      // Save to profile immediately
+      const updatedProfile = await updateProfile({ avatar_url: avatar.emojiUrl })
+      if (updatedProfile) {
+        console.log('Animated emoji avatar saved successfully:', avatar.emojiName)
+        // Update the auth context with the new avatar
+        updateProfileInContext({ avatar_url: avatar.emojiUrl })
+        // Show success feedback
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+      } else {
+        console.error('Failed to save animated emoji avatar - no profile returned')
+        alert('Failed to save avatar. Please try again.')
+        // Revert to previous avatar
+        setAvatarUrl(profile?.avatar_url || '')
+      }
+    } catch (error) {
+      console.error('Error saving animated emoji avatar:', error)
+      alert('Failed to save avatar. Please try again.')
+      // Revert to previous avatar
+      setAvatarUrl(profile?.avatar_url || '')
     }
   }
 
@@ -278,30 +244,11 @@ export const SettingsPanel = ({ onBack }: SettingsPanelProps) => {
 
           <div className="flex items-center gap-4">
             <div className="relative">
-              <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                {currentAnimatedEmoji ? (
-                  // Animated emoji avatar
-                  <div
-                    className="w-full h-full flex items-center justify-center"
-                    style={{ backgroundColor: currentAnimatedEmoji.color + '30' }}
-                  >
-                    <span className={`text-4xl ${getAnimationClass(currentAnimatedEmoji.animation)}`}>
-                      {currentAnimatedEmoji.emoji}
-                    </span>
-                  </div>
-                ) : avatarUrl ? (
-                  <Image
-                    src={avatarUrl}
-                    alt="Avatar"
-                    width={80}
-                    height={80}
-                    className="object-cover w-full h-full"
-                    unoptimized
-                  />
-                ) : (
-                  <User className="w-10 h-10 text-gray-400" />
-                )}
-              </div>
+              <Avatar
+                src={avatarUrl}
+                alt="Avatar"
+                size="2xl"
+              />
               {uploadingAvatar && (
                 <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
                   <Loader2 className="w-6 h-6 animate-spin text-white" />
@@ -356,7 +303,7 @@ export const SettingsPanel = ({ onBack }: SettingsPanelProps) => {
             isOpen={showAnimatedPicker}
             onClose={() => setShowAnimatedPicker(false)}
             onSelect={handleAnimatedEmojiSelect}
-            currentAvatarId={parsedAvatar.emojiId}
+            currentAvatarUrl={isAnimatedEmoji ? avatarUrl : undefined}
           />
 
           {/* AI Avatar Generator */}

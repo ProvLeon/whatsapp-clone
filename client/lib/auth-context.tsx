@@ -11,6 +11,7 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   socketConnected: boolean
+  updateProfileInContext: (updates: Partial<Profile>) => void
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -19,6 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   loading: true,
   socketConnected: false,
+  updateProfileInContext: () => { },
 })
 
 export const useAuth = () => useContext(AuthContext)
@@ -135,8 +137,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [])
 
+  // Function to update profile in context (for local state updates after profile changes)
+  const updateProfileInContext = (updates: Partial<Profile>) => {
+    setProfile(prev => prev ? { ...prev, ...updates } : null)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profile, session, loading, socketConnected }}>
+    <AuthContext.Provider value={{ user, profile, session, loading, socketConnected, updateProfileInContext }}>
       {children}
     </AuthContext.Provider>
   )

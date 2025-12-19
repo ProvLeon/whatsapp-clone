@@ -1,80 +1,23 @@
 'use client'
 
-import { useEffect } from 'react'
 import Image from 'next/image'
 import { User } from 'lucide-react'
-import { parseAvatarUrl, ANIMATED_EMOJIS, getAnimationClass } from '@/components/AnimatedAvatarPicker'
-
-// Animation styles - injected once when component mounts
-const animationStyles = `
-  @keyframes avatar-bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
-  }
-  @keyframes avatar-pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.15); }
-  }
-  @keyframes avatar-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-  @keyframes avatar-shake {
-    0%, 100% { transform: translateX(0) rotate(0deg); }
-    25% { transform: translateX(-3px) rotate(-5deg); }
-    75% { transform: translateX(3px) rotate(5deg); }
-  }
-  @keyframes avatar-wiggle {
-    0%, 100% { transform: rotate(0deg); }
-    25% { transform: rotate(-10deg); }
-    75% { transform: rotate(10deg); }
-  }
-  @keyframes avatar-float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
-  }
-  @keyframes avatar-heartbeat {
-    0%, 100% { transform: scale(1); }
-    14% { transform: scale(1.2); }
-    28% { transform: scale(1); }
-    42% { transform: scale(1.2); }
-    70% { transform: scale(1); }
-  }
-  @keyframes avatar-wave {
-    0%, 100% { transform: rotate(0deg); }
-    10% { transform: rotate(14deg); }
-    20% { transform: rotate(-8deg); }
-    30% { transform: rotate(14deg); }
-    40% { transform: rotate(-4deg); }
-    50% { transform: rotate(10deg); }
-    60% { transform: rotate(0deg); }
-  }
-
-  .animate-avatar-bounce { animation: avatar-bounce 0.8s ease-in-out infinite; }
-  .animate-avatar-pulse { animation: avatar-pulse 1.2s ease-in-out infinite; }
-  .animate-avatar-spin { animation: avatar-spin 3s linear infinite; }
-  .animate-avatar-shake { animation: avatar-shake 0.5s ease-in-out infinite; }
-  .animate-avatar-wiggle { animation: avatar-wiggle 0.8s ease-in-out infinite; }
-  .animate-avatar-float { animation: avatar-float 2s ease-in-out infinite; }
-  .animate-avatar-heartbeat { animation: avatar-heartbeat 1.5s ease-in-out infinite; }
-  .animate-avatar-wave { animation: avatar-wave 1.8s ease-in-out infinite; }
-`
+import { parseAvatarUrl } from '@/components/AnimatedAvatarPicker'
 
 // Size configurations
 const sizeConfig = {
-  xs: { container: 'w-6 h-6', image: 24, emoji: 'text-sm', icon: 'w-3 h-3' },
-  sm: { container: 'w-8 h-8', image: 32, emoji: 'text-lg', icon: 'w-4 h-4' },
-  md: { container: 'w-10 h-10', image: 40, emoji: 'text-xl', icon: 'w-5 h-5' },
-  lg: { container: 'w-12 h-12', image: 48, emoji: 'text-2xl', icon: 'w-6 h-6' },
-  xl: { container: 'w-16 h-16', image: 64, emoji: 'text-3xl', icon: 'w-8 h-8' },
-  '2xl': { container: 'w-20 h-20', image: 80, emoji: 'text-4xl', icon: 'w-10 h-10' },
+  xs: { container: 'w-6 h-6', image: 24, icon: 'w-3 h-3' },
+  sm: { container: 'w-8 h-8', image: 32, icon: 'w-4 h-4' },
+  md: { container: 'w-10 h-10', image: 40, icon: 'w-5 h-5' },
+  lg: { container: 'w-12 h-12', image: 48, icon: 'w-6 h-6' },
+  xl: { container: 'w-16 h-16', image: 64, icon: 'w-8 h-8' },
+  '2xl': { container: 'w-20 h-20', image: 80, icon: 'w-10 h-10' },
 }
 
 export interface AvatarProps {
   src?: string | null
   alt?: string
   size?: keyof typeof sizeConfig
-  animate?: boolean
   className?: string
   showOnlineIndicator?: boolean
   isOnline?: boolean
@@ -85,23 +28,11 @@ export const Avatar = ({
   src,
   alt = 'Avatar',
   size = 'md',
-  animate = true,
   className = '',
   showOnlineIndicator = false,
   isOnline = false,
   fallbackIcon,
 }: AvatarProps) => {
-  // Inject animation styles on mount
-  useEffect(() => {
-    const styleId = 'avatar-component-styles'
-    if (!document.getElementById(styleId)) {
-      const styleElement = document.createElement('style')
-      styleElement.id = styleId
-      styleElement.textContent = animationStyles
-      document.head.appendChild(styleElement)
-    }
-  }, [])
-
   const config = sizeConfig[size]
   const parsed = parseAvatarUrl(src)
 
@@ -116,19 +47,18 @@ export const Avatar = ({
   }
 
   const renderContent = () => {
-    // Animated emoji avatar
-    if (parsed.type === 'animated-emoji' && parsed.emoji) {
-      const emoji = parsed.emoji
+    // Animated emoji avatar (Telegram animated emoji)
+    if (parsed.type === 'animated-emoji' && parsed.emojiUrl) {
       return (
-        <div
-          className={`${config.container} rounded-full flex items-center justify-center overflow-hidden`}
-          style={{ backgroundColor: emoji.color + '30' }}
-        >
-          <span
-            className={`${config.emoji} ${animate ? getAnimationClass(emoji.animation) : ''}`}
-          >
-            {emoji.emoji}
-          </span>
+        <div className={`${config.container} rounded-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-purple-100 to-pink-100`}>
+          <Image
+            src={parsed.emojiUrl}
+            alt={alt}
+            width={config.image}
+            height={config.image}
+            className="object-contain"
+            unoptimized
+          />
         </div>
       )
     }

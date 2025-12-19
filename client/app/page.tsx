@@ -35,6 +35,8 @@ import { MessageContent } from '@/components/MessageContent'
 import { MediaMessage } from '@/components/MediaMessage'
 import { SettingsPanel } from '@/components/SettingsPanel'
 import { RichMessageInput, RichMessageInputRef } from '@/components/RichMessageInput'
+import { Avatar } from '@/components/Avatar'
+
 import { Emoji, parseEmojisInMessage } from '@/lib/emoji-data'
 import {
   SendHorizonal,
@@ -1000,22 +1002,11 @@ export default function Home() {
         {/* Sidebar Header */}
         <div className="h-16 px-4 border-b flex items-center justify-between bg-gray-50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-              {profile.avatar_url ? (
-                <Image
-                  src={profile.avatar_url}
-                  alt="Avatar"
-                  width={40}
-                  height={40}
-                  className="object-cover w-full h-full"
-                  unoptimized
-                />
-              ) : (
-                <span className="text-primary font-semibold text-lg">
-                  {profile.username[0].toUpperCase()}
-                </span>
-              )}
-            </div>
+            <Avatar
+              src={profile.avatar_url}
+              alt={profile.display_name || profile.username}
+              size="md"
+            />
             <div className="hidden sm:block">
               <p className="font-semibold text-gray-900 text-sm">
                 {profile.display_name || profile.username}
@@ -1106,20 +1097,12 @@ export default function Home() {
                             className={`w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition ${activeChat?.id === room.id ? 'bg-primary/5' : ''
                               }`}
                           >
-                            <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                              {room.avatar_url ? (
-                                <Image
-                                  src={room.avatar_url}
-                                  alt={room.name}
-                                  width={48}
-                                  height={48}
-                                  className="object-cover w-full h-full rounded-full"
-                                  unoptimized
-                                />
-                              ) : (
-                                <Hash className="w-5 h-5 text-blue-600" />
-                              )}
-                            </div>
+                            <Avatar
+                              src={room.avatar_url}
+                              alt={room.name}
+                              size="lg"
+                              fallbackIcon={<Hash className="w-5 h-5 text-blue-600" />}
+                            />
                             <div className="flex-1 text-left min-w-0">
                               <p className="font-medium text-gray-900 truncate">
                                 {room.name}
@@ -1166,27 +1149,13 @@ export default function Home() {
                             className={`w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition ${activeChat?.id === conv.id ? 'bg-primary/5' : ''
                               }`}
                           >
-                            <div className="relative flex-shrink-0">
-                              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                                {conv.other_user?.avatar_url ? (
-                                  <Image
-                                    src={conv.other_user.avatar_url}
-                                    alt=""
-                                    width={48}
-                                    height={48}
-                                    className="object-cover w-full h-full"
-                                    unoptimized
-                                  />
-                                ) : (
-                                  <span className="text-gray-600 font-semibold text-lg">
-                                    {(conv.other_user?.username || 'U')[0].toUpperCase()}
-                                  </span>
-                                )}
-                              </div>
-                              {conv.other_user?.is_online && (
-                                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
-                              )}
-                            </div>
+                            <Avatar
+                              src={conv.other_user?.avatar_url}
+                              alt={conv.other_user?.display_name || conv.other_user?.username}
+                              size="lg"
+                              showOnlineIndicator
+                              isOnline={conv.other_user?.is_online}
+                            />
                             <div className="flex-1 text-left min-w-0">
                               <p className="font-medium text-gray-900 truncate">
                                 {conv.other_user?.display_name ||
@@ -1425,29 +1394,14 @@ export default function Home() {
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </Button>
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                    {activeChat.avatar ? (
-                      <Image
-                        src={activeChat.avatar}
-                        alt=""
-                        width={40}
-                        height={40}
-                        className="object-cover w-full h-full"
-                        unoptimized
-                      />
-                    ) : activeChat.type === 'room' ? (
-                      <Hash className="w-5 h-5 text-blue-600" />
-                    ) : (
-                      <span className="text-gray-600 font-semibold">
-                        {activeChat.name[0].toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  {activeChat.type === 'conversation' && activeChat.isOnline && (
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
-                  )}
-                </div>
+                <Avatar
+                  src={activeChat.avatar}
+                  alt={activeChat.name}
+                  size="md"
+                  showOnlineIndicator={activeChat.type === 'conversation'}
+                  isOnline={activeChat.isOnline}
+                  fallbackIcon={activeChat.type === 'room' ? <Hash className="w-5 h-5 text-blue-600" /> : undefined}
+                />
                 <div>
                   <p className="font-semibold text-gray-900">{activeChat.name}</p>
                   <p className="text-xs text-gray-500">
@@ -1872,27 +1826,13 @@ export default function Home() {
                       key={member.id}
                       className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50"
                     >
-                      <div className="relative">
-                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                          {member.avatar_url ? (
-                            <Image
-                              src={member.avatar_url}
-                              alt=""
-                              width={40}
-                              height={40}
-                              className="object-cover w-full h-full"
-                              unoptimized
-                            />
-                          ) : (
-                            <span className="text-gray-600 font-semibold">
-                              {member.username[0].toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        {member.is_online && (
-                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
-                        )}
-                      </div>
+                      <Avatar
+                        src={member.avatar_url}
+                        alt={member.display_name || member.username}
+                        size="md"
+                        showOnlineIndicator
+                        isOnline={member.is_online}
+                      />
                       <div className="flex-1">
                         <p className="font-medium text-gray-900 flex items-center gap-2">
                           {member.display_name || member.username}
@@ -2134,22 +2074,11 @@ export default function Home() {
                         className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                            {userResult.avatar_url ? (
-                              <Image
-                                src={userResult.avatar_url}
-                                alt=""
-                                width={40}
-                                height={40}
-                                className="object-cover w-full h-full"
-                                unoptimized
-                              />
-                            ) : (
-                              <span className="text-gray-600 font-semibold">
-                                {userResult.username[0].toUpperCase()}
-                              </span>
-                            )}
-                          </div>
+                          <Avatar
+                            src={userResult.avatar_url}
+                            alt={userResult.display_name || userResult.username}
+                            size="md"
+                          />
                           <div>
                             <p className="font-medium text-gray-900">
                               {userResult.display_name || userResult.username}
